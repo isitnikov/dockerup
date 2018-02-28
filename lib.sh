@@ -8,7 +8,8 @@ log() {
 
 finish()
 {
-    echo "Code: $1"
+    echo "Unexpected error has happened."
+    remove_host_config
 }
 
 create_project_dir()
@@ -82,6 +83,25 @@ create_host_config()
         file_sed '%dec_ip%' "$DEC_IP" "$CONTAINER_PATH/hostconf.bak"
         cat "$CONTAINER_PATH/hostconf.bak" >> ~/.ssh/config
         rm -f "$CONTAINER_PATH/hostconf.bak"
+    fi
+}
+
+remove_host_config()
+{
+    local CONFIG_FILE POSITION LINES OFFSET
+    if [ "$CREATE_HOST_CONFIG" -eq "1" ]; then
+        CONFIG_FILE="$CONTAINERS_HOST_CONFIG_DIR_PATH/$TICKET_NUMBER"
+        log "Remove host configuration file: $CONFIG_FILE"
+        rm -Rf $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER"
+    else
+        log "Remove correspond entry from ~/.ssh/config"
+        POSITION=$(grep -n "# $DEC_IP" ~/.ssh/config | sed 's/^\([0-9]\+\):.*$/\1/')
+        if [ ! -z $POSITION ]; then
+            LINES=$(cat "$BASE_DIR/template/hostconf" | wc -l)
+            OFFSET=$((POSITION + $LINES))
+            echo $POSITION $LINES $OFFSET
+            sed -i "${POSITION},${OFFSET}d" ~/.ssh/config
+        fi
     fi
 }
 

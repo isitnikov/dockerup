@@ -25,4 +25,10 @@
     Frontend:       http://127.0.21.4/
     MailCatcher:    http://127.0.21.4:81/
     ssh:            ssh 214
+    
+### Notes for working from Windows 10 
+1. Install docker on Windows 10
+2. Enable *Expose daemon on tcp://localhost:2375 without TLS* in *Settings > General*
+3. Install CLI applications in Linux subsystem: ```sudo apt-get install docker docker-compose```
+4. Add ```export DOCKER_HOST=tcp://0.0.0.0:2375``` into *~/.bashrc* file
    
