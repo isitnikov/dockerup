@@ -1,6 +1,7 @@
-Host                    %host%
-HostName                %ip_address%
-User                    apache
-Port                    22
-IdentityFile            ~/.ssh/docker.pem
-StrictHostKeyChecking   No
+# %dec_ip%
+Host %host%
+    HostName %ip_address%
+    User apache
+    Port 22
+    IdentityFile ~/.ssh/docker.pem
+    StrictHostKeyChecking No

@@ -2,60 +2,37 @@
 
 BASE_DIR="$(dirname `readlink "$0"`)";
 
+# Include custom config
 source "$BASE_DIR/config.sh";
 if [ -f "$BASE_DIR/config_custom.sh" ]; then
     source "$BASE_DIR/config_custom.sh";
 fi
+
+# Include system files
 source "$BASE_DIR/lib.sh";
 source "$BASE_DIR/params.sh";
 source "$BASE_DIR/init.sh";
 
+trap finish EXIT
+trap finish TERM
+
 CONTAINER_PATH="$CONTAINERS_DIR_PATH/$TICKET_NUMBER";
 
 # Create dir for project
-if [ ! -d "$CONTAINER_PATH" ]; then
-    log "Create $CONTAINER_PATH";
-    mkdir -p "$CONTAINER_PATH"
-fi
+create_project_dir
 
 # Prepare IP address
-IP_ADDRESS="${CONTAINERS_IP_TEMPLATE/NUM1/${TICKET_NUMBER:0:2}}"
-IP_ADDRESS="${IP_ADDRESS/NUM2/${TICKET_NUMBER:2:2}}"
-sudo ifconfig lo0 alias $IP_ADDRESS up
+prepare_ip_address
 
 # Create docker-compose.yml
-if [ ! -f "$CONTAINER_PATH/docker-compose.yml" ]; then
-    log "Create $CONTAINER_PATH/docker-compose.yml";
-    cp "$BASE_DIR/template/docker-compose.yml" "$CONTAINER_PATH/docker-compose.yml"
-fi
-
-sed -i '' s/%ip_address%/"$IP_ADDRESS"/g "$CONTAINER_PATH"/docker-compose.yml;
-sed -i '' s/%img%/"$DOCKER_IMAGE_NAME"/g "$CONTAINER_PATH"/docker-compose.yml;
-sed -i '' s/%magento_version%/"$MAGENTO_VERSION"/g "$CONTAINER_PATH"/docker-compose.yml;
+create_docker_compose_config
 
 # Run container
-cd $CONTAINER_PATH
-log "Run container '$TICKET_NUMBER'";
-docker-compose up -d;
-
-if [ $? -eq 0 ]; then
-    log "Container was created successfully!"
-else
-    docker-compose down
-    rm -Rf $CONTAINER_PATH
-    echo "Error! Temporary folder was removed!"
-fi
+run_container
 
 # Create host config
-log "Create host config $CONTAINERS_HOST_CONFIG_DIR_PATH/$TICKET_NUMBER";
-if [ ! -d $CONTAINERS_HOST_CONFIG_DIR_PATH ]; then
-    log "Create $CONTAINERS_HOST_CONFIG_DIR_PATH";
-    mkdir -p $CONTAINERS_HOST_CONFIG_DIR_PATH
-fi
-cp "$BASE_DIR/template/hostconf" $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER";
-sed -i '' s/%host%/"$TICKET_NUMBER"/g $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER";
-sed -i '' s/%ip_address%/"$IP_ADDRESS"/g $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER";
-
+create_host_config
+exit
 # Mount container volume to the host
 sleep 3;
 log "Mount container volume to the host '$CONTAINER_PATH/src/'";

@@ -64,3 +64,10 @@ fi
 if $ERRORS ; then
     exit 0;
 fi
+
+DOCKER_COMPOSE="docker-compose$DOCKER_APP_EXT"
+
+# 127.0.0.1
+MIN_DEC_IP=2130706433
+# 127.255.255.255
+MAX_DEC_IP=2147483647
