@@ -8,8 +8,10 @@ log() {
 
 finish()
 {
-    echo "Unexpected error has happened."
-    remove_host_config
+    if [ "$?" -ne 0 ]; then
+        echo "Unexpected error has happened."
+        remove_host_config
+    fi
 }
 
 create_project_dir()
@@ -73,12 +75,12 @@ create_host_config()
             mkdir -p $CONTAINERS_HOST_CONFIG_DIR_PATH
         fi
         cp "$BASE_DIR/template/hostconf" $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER";
-        file_sed '%host%' "$TICKER_NUMBER" $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER"
+        file_sed '%host%' "$TICKET_NUMBER" $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER"
         file_sed '%ip_address%' "$IP_ADDRESS" $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER"
         file_sed '%dec_ip%' "$DEC_IP" $CONTAINERS_HOST_CONFIG_DIR_PATH/"$TICKET_NUMBER"
     else
         cp "$BASE_DIR/template/hostconf" "$CONTAINER_PATH/hostconf.bak"
-        file_sed '%host%' "$TICKER_NUMBER" "$CONTAINER_PATH/hostconf.bak"
+        file_sed '%host%' "$TICKET_NUMBER" "$CONTAINER_PATH/hostconf.bak"
         file_sed '%ip_address%' "$IP_ADDRESS" "$CONTAINER_PATH/hostconf.bak"
         file_sed '%dec_ip%' "$DEC_IP" "$CONTAINER_PATH/hostconf.bak"
         cat "$CONTAINER_PATH/hostconf.bak" >> ~/.ssh/config
@@ -103,6 +105,49 @@ remove_host_config()
             sed -i "${POSITION},${OFFSET}d" ~/.ssh/config
         fi
     fi
+}
+
+mount_container_volume()
+{
+    local CONTAINER_PATH_SRC
+    CONTAINER_PATH_SRC="$CONTAINER_PATH/src/"
+    # Mount container volume to the host
+    sleep 3;
+    log "Mount container volume to the host '$CONTAINER_PATH_SRC'";
+
+    if [ ! -d $CONTAINER_PATH_SRC ]; then
+        mkdir -p "$CONTAINER_PATH_SRC";
+        log "$CONTAINER_PATH_SRC was created successfully!"
+    else
+        if [ ! "$(ls -A $CONTAINER_PATH_SRC)" ]
+        then
+            log "$CONTAINER_PATH_SRC is empty and can be used as mount point"
+        else
+            log "$CONTAINER_PATH_SRC is not empty and won't be used for mounting"
+            return 1
+        fi
+    fi
+
+    sshfs "$TICKET_NUMBER":/var/www/html/ "$CONTAINER_PATH_SRC" -ocache=no;
+    log "Mounted!"
+}
+
+set_domain()
+{
+    # Set own domain
+    #
+    #sudo sh -c "echo '$IP_ADDRESS     $DOMAIN' >> /etc/hosts"
+
+    local LINE
+    db_find "/etc/hosts" "$IP_ADDRESS"
+    if [ "$POSITION" -ne 0 ]; then
+        log "Domain for this container is already exists in the /etc/hosts"
+        DOMAIN=$(echo $RESULT | awk '{print $2}')
+    else
+        DOMAIN="$TICKET_NUMBER.$CONTAINERS_DOMAIN_SUFFIX"
+        sudo sh -c "echo '$IP_ADDRESS     $DOMAIN' >> /etc/hosts"
+    fi
+    log "Domain is '$DOMAIN'"
 }
 
 file_sed()
@@ -130,7 +175,7 @@ db_add_entry()
         log "Can't write to file $TABLE"
     else
         RESULT="1"
-        POSITION=$(grep -n "$ENTRY" $TABLE | sed 's/^\([0-9]\+\):.*$/\1/')
+        POSITION=$(grep -n "$ENTRY" $TABLE | head -n1 | awk -F ':' '{print $1}')
     fi
 }
 
@@ -139,8 +184,8 @@ db_find()
     local TABLE KEYWORD
     TABLE="$1"
     KEYWORD="$2"
-    RESULT=$(grep "$KEYWORD" $TABLE)
-    POSITION=$(grep -n "$KEYWORD" $TABLE | sed 's/^\([0-9]\+\):.*$/\1/')
+    RESULT=$(grep "$KEYWORD" $TABLE | head -n1)
+    POSITION=$(grep -n "$KEYWORD" $TABLE | head -n1 | awk -F ':' '{print $1}')
 }
 
 db_remove_line()

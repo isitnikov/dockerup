@@ -32,16 +32,13 @@ run_container
 
 # Create host config
 create_host_config
-exit
-# Mount container volume to the host
-sleep 3;
-log "Mount container volume to the host '$CONTAINER_PATH/src/'";
-mkdir -p "$CONTAINER_PATH/src";
-sshfs "$TICKET_NUMBER":/var/www/html/ "$CONTAINER_PATH/src/" -ocache=no;
 
-# Set own domain
-DOMAIN="$TICKET_NUMBER.$CONTAINERS_DOMAIN_SUFFIX"
-sudo sh -c "echo '$IP_ADDRESS     $DOMAIN' >> /etc/hosts"
+# Mount container volume
+mount_container_volume
+
+# Set domain
+set_domain
+exit
 
 M2_DUMPS_DEPLOYED=0
 if [ "$MAGENTO_VERSION" = "m2" ] && [ "$DOCKER_IMAGE_NAME" = "base" ]

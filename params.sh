@@ -7,6 +7,7 @@ VERBOSE=false;
 HELP=false;
 MAGENTO_VERSION=m2;
 XDEBUG=false;
+LOCAL_INTERFACE=en0
 
 while [[ $# -gt 0 ]]
 do
