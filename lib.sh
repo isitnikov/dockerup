@@ -140,14 +140,123 @@ set_domain()
 
     local LINE
     db_find "/etc/hosts" "$IP_ADDRESS"
-    if [ "$POSITION" -ne 0 ]; then
-        log "Domain for this container is already exists in the /etc/hosts"
-        DOMAIN=$(echo $RESULT | awk '{print $2}')
-    else
+    if [ -z "$POSITION" ]; then
         DOMAIN="$TICKET_NUMBER.$CONTAINERS_DOMAIN_SUFFIX"
         sudo sh -c "echo '$IP_ADDRESS     $DOMAIN' >> /etc/hosts"
+    else
+        log "Domain for this container is already exists in the /etc/hosts"
+        DOMAIN=$(echo $RESULT | awk '{print $2}')
     fi
     log "Domain is '$DOMAIN'"
+}
+
+
+#getLocalValue()
+#{
+#    PARAMVALUE=`sed -n "/<resources>/,/<\/resources>/p" $LOCALXMLPATH | sed -n -e "s/.*<$1><!\[CDATA\[\(.*\)\]\]><\/$1>.*/\1/p" | head -n 1`
+#}
+
+find_and_copy_dumps()
+{
+    log "Finding code dump..."
+    codeDumpFilename=$(find . -maxdepth 1 -name '*.tbz2' -o -name '*.tar.bz2' | head -n1)
+    if [ "${codeDumpFilename}" == "" ]
+    then
+        codeDumpFilename=$(find . -maxdepth 1 -name '*.tar.gz' | grep -v 'logs.tar.gz' | head -n1)
+    fi
+    if [ ! "$codeDumpFilename" ]
+    then
+        codeDumpFilename=$(find . -maxdepth 1 -name '*.tgz' | head -n1)
+    fi
+    if [ ! "$codeDumpFilename" ]
+    then
+        codeDumpFilename=$(find . -maxdepth 1 -name '*.zip' | head -n1)
+    fi
+
+    if [ "$codeDumpFilename" != "" ]
+    then
+        log "Code dump $codeDumpFilename was copied to container!"
+        scp "$codeDumpFilename" $TICKET_NUMBER:/var/www/html
+    else
+        log "Code dump was not found!"
+    fi
+
+    log "Finding db dump..."
+    dbdumpFilename=$(find . -maxdepth 1 -name '*.sql.gz' | head -n1)
+    if [ ! "$dbdumpFilename" ]
+    then
+        dbdumpFilename=$(find . -maxdepth 1 -name '*_db.gz' | head -n1)
+    fi
+    if [ ! "$dbdumpFilename" ]
+    then
+        dbdumpFilename=$(find . -maxdepth 1 -name '*.sql' | head -n1)
+    fi
+
+    if [ "$dbdumpFilename" != "" ]
+    then
+        log "Database dump $codeDumpFilename was copied to container"
+        scp "$dbdumpFilename" $TICKET_NUMBER:/var/www/html
+    else
+        log "Code dump was not found!"
+    fi
+}
+
+m2_get_db_param()
+{
+    PARAM="$1"
+    RESULT=$(ssh "$TICKET_NUMBER" "php -r \"\\\$c=include \\\"//var//www//html//app//etc//env.php\\\"; echo \\\$c[\\\"db\\\"][\\\"connection\\\"][\\\"default\\\"][\\\"$PARAM\\\"];\"")
+}
+
+m2_is_git()
+{
+    RESULT=1
+    CHECK=$(ssh "$TICKET_NUMBER" "ls /var/www/html/app/code/Magento/AdminNotification/registration.php | grep \"No such\"")
+    if [ -z "$CHECK" ]; then
+        RESULT=0
+    fi
+}
+
+m2_is_installed()
+{
+    RESULT=0
+    CHECK=$(ssh "$TICKET_NUMBER" "php -r \"\\\$c=include \\\"//var//www//html//app//etc//env.php\\\"; echo \\\$c[\\\"install\\\"][\\\"date\\\"];\"" | grep "Undefined" | awk NF)
+    if [ -z "$CHECK" ]; then
+        RESULT=1
+    fi
+ }
+
+m2_is_correct_domain()
+{
+    RESULT=0
+    CHECK=$(ssh "$TICKET_NUMBER" "mysql $DB_USER $DB_PASSWORD $DB_NAME -e\"SELECT * FROM core_config_data WHERE path like \\\"web%url\\\";\"" | grep "$DOMAIN" | awk NF)
+    if [ ! -z "$CHECK" ]; then
+        RESULT=1
+    fi
+}
+
+m2_get_db_credentials()
+{
+    DB_USER=
+    DB_NAME=
+    DB_PASSWORD=
+
+    #get db user
+    m2_get_db_param "username"
+    if [ ! -z "$RESULT" ]; then
+        DB_USER="-u$RESULT"
+    fi
+
+    #get db name
+    m2_get_db_param "dbname"
+    if [ ! -z "$RESULT" ]; then
+        DB_NAME="$RESULT"
+    fi
+
+    #get db user
+    m2_get_db_param "password"
+    if [ ! -z "$RESULT" ]; then
+        DB_PASSWORD="-p$RESULT"
+    fi
 }
 
 file_sed()
@@ -182,6 +291,7 @@ db_add_entry()
 db_find()
 {
     local TABLE KEYWORD
+    POSITION=0
     TABLE="$1"
     KEYWORD="$2"
     RESULT=$(grep "$KEYWORD" $TABLE | head -n1)

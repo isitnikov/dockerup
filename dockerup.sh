@@ -38,9 +38,68 @@ mount_container_volume
 
 # Set domain
 set_domain
-exit
 
+# prepare for using
 M2_DUMPS_DEPLOYED=0
+case $MAGENTO_VERSION in
+    m1)
+        # action if it's m1
+        shift
+    ;;
+    m2)
+        # check if magento installed
+        m2_is_installed
+
+        if [ "$RESULT" -eq 0 ]
+        then
+            log "Magento 2 is not installed yet"
+
+            log "Creating .m2install.conf file..."
+            cp "$BASE_DIR/template/.m2install.conf" "$CONTAINER_PATH/.m2install.conf"
+            file_sed '%domain%' "$DOMAIN" "$CONTAINER_PATH/.m2install.conf"
+            scp "$CONTAINER_PATH/.m2install.conf" "$TICKET_NUMBER:/var/www/html"
+            log "Created!"
+
+            find_and_copy_dumps
+
+            if [ "$codeDumpFilename" != "" ] && [ "$dbdumpFilename" != "" ]
+                log "Code and database dumps were found. Staring m2install tool..."
+                ssh $TICKET_NUMBER "cd /var/www/html; m2install.sh --force"
+            then
+                log "Code and database dumps were not found. m2install will not run automatically!"
+            fi
+        else
+            log "Magento 2 is installed. Getting db credentials..."
+            m2_get_db_credentials
+            if [ -z "$DB_USER" ]
+            then
+                log "Error!"
+                exit 1
+            else
+                log "Magento 2 checking the domain name in the url..."
+                m2_is_correct_domain
+                if [ "$RESULT" -eq 0 ]
+                then
+                    log "Incorrect domain. Updating..."
+                    ssh "$TICKET_NUMBER" "mysql $DB_USER $DB_PASSWORD $DB_NAME -e \"UPDATE core_config_data SET value=\\\"http://$DOMAIN/\\\" WHERE path LIKE \\\"web%url\\\";\""
+                    ssh "$TICKET_NUMBER" "php /var/www/html/bin/magento cache:flush"
+                    log "OK"
+                else
+                    log "Correct domain. Skip..."
+                fi
+            fi
+        fi
+
+        shift
+    ;;
+    *)
+        log "Unknown Magento version"
+    ;;
+esac
+log "Done!"
+exit 0
+
+
 if [ "$MAGENTO_VERSION" = "m2" ] && [ "$DOCKER_IMAGE_NAME" = "base" ]
 then
     echo "Creating .m2install.conf file..."
@@ -123,3 +182,7 @@ if [ "$XDEBUG" ]; then
     log "Enable xdebug"
     ssh $TICKET_NUMBER "sudo /usr/local/bin/xdebug-sw.sh 1"
 fi
+
+ssh 226 "php -r \"\$c = include\(\"\/var\/www\/html\/app\/etc\/env.php\"\); echo \$c[\"db\"][\"connection\"][\"default\"][\"dbname\"];\""
+
+ssh 226 "php -r \"\\\$c=include \\\"//var//www//html//app//etc//env.php\\\"; echo \\\$c[\\\"db\\\"][\\\"connection\\\"][\\\"default\\\"][\\\"$PARAM\\\"];\""
